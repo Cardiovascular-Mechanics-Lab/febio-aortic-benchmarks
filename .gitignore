@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# FEBio outputs
+*.xplt
+*.log
+*.plt
+
+# VS Code
+.vscode/
+
+# Windows
+Thumbs.db
