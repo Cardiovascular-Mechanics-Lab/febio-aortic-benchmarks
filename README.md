@@ -1,3 +1,5 @@
+
+Python scripts that generate FEBio input files for aortic benchmark problems
 Current features:
 - Structured Hex8 mesh generation
 - Boundary-condition node group generation
@@ -11,3 +13,7 @@ Future goals:
 - Multiple element types
 - Biaxial loading
 - Automated postprocessing
+
+# febio-aortic-benchmarks
+Python scripts that generate FEBio input files for aortic benchmark problems
+
