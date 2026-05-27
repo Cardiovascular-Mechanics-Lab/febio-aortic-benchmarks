@@ -1,5 +1,3 @@
-
-Python scripts that generate FEBio input files for aortic benchmark problems
 Current features:
 - Structured Hex8 mesh generation
 - Boundary-condition node group generation
