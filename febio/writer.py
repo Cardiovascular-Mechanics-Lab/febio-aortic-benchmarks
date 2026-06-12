@@ -1,20 +1,25 @@
-"""
-writer.py
-
-Converts procedurally generated mesh, material, boundary-condition, and loading data into
-a valid FEBio input (.feb) file.
-"""
-
-def write_mesh_feb(filename, nodes, elements, BC_groups):
+def write_mesh_feb(filename, nodes, elements, BC_groups, material_type, density, layers, num_layers, prescribed_displacement_x, prescribed_displacement_y, time_steps, step_size, layer_element_groups, symmetry, loading_type, loading_mode):
 
     """
-    Writes a FEBio .feb input file for a simple uniaxial plate model.
+    Writes a FEBio .feb input file for a layered rectangular specimen based on user input from main.py..
 
     Parameters:
         filename: output .feb file name
         nodes: array containing [node_id, x, y, z]
         elements: array containing [element_id, n1, ..., n8]
         BC_groups: dictionary of node sets used for boundary conditions
+        material_type: FEBio material model name
+        density: material density used for all layers
+        layers: list of layer dictionaries containing name, fraction, E, and v
+        num_layers: number of material layers
+        prescribed_displacement_x: prescribed displacement in x direction
+        prescribed_displacement_y: prescribed displacement in y direction
+        time_steps: number of FEBio time steps
+        step_size: time increment size
+        layer_element_groups: list of element groups, one per layer
+        symmetry: full, half, or quarter model
+        loading_type: uniaxial or biaxial
+        loading_mode: symmetric_gauge or grip_constrained
     """
     with open(filename, "w") as file:
 
@@ -31,8 +36,8 @@ def write_mesh_feb(filename, nodes, elements, BC_groups):
 
         file.write('    <analysis type="static"/>\n')
 
-        file.write('    <time_steps>10</time_steps>\n')
-        file.write('    <step_size>0.1</step_size>\n')
+        file.write(f'    <time_steps>{time_steps}</time_steps>\n')
+        file.write(f'    <step_size>{step_size}</step_size>\n')
 
         file.write('    <solver>\n')
         file.write('      <max_refs>25</max_refs>\n')
@@ -42,22 +47,33 @@ def write_mesh_feb(filename, nodes, elements, BC_groups):
 
         file.write('  </Control>\n\n')
 
-        # Neo-Hookean material currently hardcoded for initial testing
-        # TODO: make material type and parameters user-defined from main.py
         # MATERIAL SECTION
+        
+        if len(layers) != num_layers:
+            raise ValueError(
+                f"num_layers={num_layers} but layers contains {len(layers)} entries"
+            )
         file.write('  <Material>\n')
-        file.write('    <material id="1" name="Material1" type="neo-Hookean">\n')
-        file.write('      <density>1</density>\n')
-        file.write('      <E>0.5</E>\n')
-        file.write('      <v>0.49</v>\n')
-        file.write('    </material>\n')
-        file.write('  </Material>\n\n')
 
+        for i, layer in enumerate(layers, start=1):
+            file.write(
+                f'    <material id="{i}" '
+                f'name="{layer["name"]}" '
+                f'type="{material_type}">\n'
+            )
+
+            file.write(f'      <density>{density}</density>\n')
+            file.write(f'      <E>{layer["E"]}</E>\n')
+            file.write(f'      <v>{layer["v"]}</v>\n')
+            file.write('    </material>\n\n')
+
+        file.write('  </Material>\n\n')
+        
         # MESH SECTION
         file.write('  <Mesh>\n\n')
 
         # Write FEBio node coordinates from generated node array
-        # NODES
+        # Nodes
         file.write('    <Nodes name="Object1">\n')
 
         for node in nodes:
@@ -69,33 +85,32 @@ def write_mesh_feb(filename, nodes, elements, BC_groups):
             z = node[3]
 
             file.write(
-                f'      <node id="{node_id}">{x}, {y}, {z}</node>\n'
-            )
+                f'      <node id="{node_id}">{x}, {y}, {z}</node>\n')
 
         file.write('    </Nodes>\n\n')
 
 
         # Write Hex8 element connectivity from generated element array
-        # ELEMENTS
-        file.write('    <Elements type="hex8" name="Part1">\n')
+        # Elements
 
-        for element in elements:
+        for layer, layer_elements in zip(layers, layer_element_groups):
 
-            element_id = int(element[0])
+            file.write(f'    <Elements type="hex8" name="{layer["name"]}">\n')
 
-            node_ids = element[1:]
+            for element in layer_elements:
 
-            node_string = ", ".join(
-                str(int(n)) for n in node_ids
-            )
+                element_id = int(element[0])
 
-            file.write(
-                f'      <elem id="{element_id}">{node_string}</elem>\n'
-            )
+                node_ids = element[1:]
 
-        file.write('    </Elements>\n\n')
+                node_string = ", ".join(str(int(n)) for n in node_ids)
+
+                file.write(f'      <elem id="{element_id}">{node_string}</elem>\n')
+
+            file.write('    </Elements>\n\n')
+
     
-        # NODE SETS / BC GROUPS
+        # Node Sets/BC groups
         for group_name, node_ids in BC_groups.items():
 
             file.write(f'    <NodeSet name="{group_name}">\n')
@@ -106,48 +121,227 @@ def write_mesh_feb(filename, nodes, elements, BC_groups):
 
             file.write(f'      {node_string}\n')
             file.write('    </NodeSet>\n\n')
-
+    
         file.write('  </Mesh>\n\n')
 
         # Assign material to the solid element domain
         # MESH DOMAIN
         file.write('  <MeshDomains>\n')
-        file.write('    <SolidDomain name="Part1" mat="Material1"/>\n')
+
+        for layer in layers:
+            file.write(
+                f'    <SolidDomain name="{layer["name"]}" mat="{layer["name"]}"/>\n'
+            )
+
         file.write('  </MeshDomains>\n\n')
 
         # BOUNDARY CONDITIONS
         file.write('  <Boundary>\n')
 
-        #Fix x-displacement on left face (anchors specimen)
-        file.write('    <bc name="fix_left_x" node_set="left_face" type="zero displacement">\n')
-        file.write('      <x_dof>1</x_dof>\n')
-        file.write('      <y_dof>0</y_dof>\n')
-        file.write('      <z_dof>0</z_dof>\n')
-        file.write('    </bc>\n\n')
-        
-        #Apply prescribed x-displacement on right face (uniaxial, 1/2 model)
-        file.write('    <bc name="pull_right_x" node_set="right_face" type="prescribed displacement">\n')
-        file.write('      <dof>x</dof>\n')
-        file.write('      <value lc="1">2</value>\n')
-        file.write('      <relative>0</relative>\n')
-        file.write('    </bc>\n\n')
-        
-        #Anchor one line in y direction to prevent rigid body motion
-        file.write('    <bc name="fix_front_left_y" node_set="front_left_edge" type="zero displacement">\n')
-        file.write('      <x_dof>0</x_dof>\n')
-        file.write('      <y_dof>1</y_dof>\n')
-        file.write('      <z_dof>0</z_dof>\n')
-        file.write('    </bc>\n\n')
 
-        #Anchor one line in z direction to prevent rigid body motion
-        file.write('    <bc name="fix_bottom_left_z" node_set="bottom_left_edge" type="zero displacement">\n')
-        file.write('      <x_dof>0</x_dof>\n')
-        file.write('      <y_dof>0</y_dof>\n')
-        file.write('      <z_dof>1</z_dof>\n')
-        file.write('    </bc>\n\n')
+        if loading_type == "uniaxial":
+            # Symmetry-based boundary conditions
+            if symmetry == "full" and loading_mode == "symmetric_gauge":
+                #Assigns prescribed displacement to both edges normal to x-axis (in posiytive & negative directions)
+                file.write('    <bc name="pull_left_x" node_set="left_face" type="prescribed displacement">\n')
+                file.write('      <dof>x</dof>\n')
+                file.write(f'      <value lc="1">{-prescribed_displacement_x}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+                file.write('    <bc name="pull_right_x" node_set="right_face" type="prescribed displacement">\n')
+                file.write('      <dof>x</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_x}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+            elif symmetry == "full" and loading_mode == "grip_constrained":
+                
+                #Fix left face, simulating a grip that constrains motion in x, y, z
+                file.write('    <bc name="constrain_left_x" node_set="left_face" type="zero displacement">\n')
+                file.write('      <x_dof>1</x_dof>\n')
+                file.write('      <y_dof>1</y_dof>\n')
+                file.write('      <z_dof>1</z_dof>\n')
+                file.write('    </bc>\n\n')
+
+                #Fix right face in y and z, prescribed dispalcement in x
+                file.write('    <bc name="fix_right_grip_yz" node_set="right_face" type="zero displacement">\n')
+                file.write('      <x_dof>0</x_dof>\n')
+                file.write(f'     <y_dof>1</y_dof>\n')
+                file.write(f'     <z_dof>1</z_dof>\n')
+                file.write('    </bc>\n\n')
+                
+                file.write('    <bc name="pull_right_x" node_set="right_face" type="prescribed displacement">\n')
+                file.write('      <dof>x</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_x}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+                
+            elif symmetry == "half" and loading_mode == "symmetric_gauge":
+
+                #Assigns zero displacement to symmetry plane in x, where the model is cut for half model
+                file.write('    <bc name="symmetry_x" node_set="symmetry_x" type="zero displacement">\n')
+                file.write('      <x_dof>1</x_dof>\n')
+                file.write('      <y_dof>0</y_dof>\n')
+                file.write('      <z_dof>0</z_dof>\n')
+                file.write('    </bc>\n\n')
+
+                file.write('    <bc name="pull_right_x" node_set="right_face" type="prescribed displacement">\n')
+                file.write('      <dof>x</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_x}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+            
+            elif symmetry == "quarter" and loading_mode == "symmetric_gauge":
+
+                #Assigns zero displacement for symmetry planes in x and in y, prescribed displacement for right face
+                file.write('    <bc name="symmetry_x" node_set="symmetry_x" type="zero displacement">\n')
+                file.write('      <x_dof>1</x_dof>\n')
+                file.write('      <y_dof>0</y_dof>\n')
+                file.write('      <z_dof>0</z_dof>\n')
+                file.write('    </bc>\n\n')
+
+                file.write('    <bc name="symmetry_y" node_set="symmetry_y" type="zero displacement">\n')
+                file.write('      <x_dof>0</x_dof>\n')
+                file.write('      <y_dof>1</y_dof>\n')
+                file.write('      <z_dof>0</z_dof>\n')
+                file.write('    </bc>\n\n')
+
+                file.write('    <bc name="pull_right_x" node_set="right_face" type="prescribed displacement">\n')
+                file.write('      <dof>x</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_x}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')   
+
+            else:
+                raise ValueError("symmetry must be 'full', 'half', or 'quarter'")
+             
+             
+            # Y anchor for full and half models only
+            # Quarter models already contain a y-symmetry plane, so the y-anchorwas not added for it.
+       
+            if loading_mode == "symmetric_gauge":
+
+                if symmetry in ["full", "half"]:
+                    file.write('    <bc name="fix_y_anchor" node_set="y_anchor" type="zero displacement">\n')
+                    file.write('      <x_dof>0</x_dof>\n')
+                    file.write('      <y_dof>1</y_dof>\n')
+                    file.write('      <z_dof>0</z_dof>\n')
+                    file.write('    </bc>\n\n')
+
+                # Z anchor for all models to prevent rigid body motion
+                file.write('    <bc name="fix_z_anchor" node_set="z_anchor" type="zero displacement">\n')
+                file.write('      <x_dof>0</x_dof>\n')
+                file.write('      <y_dof>0</y_dof>\n')
+                file.write('      <z_dof>1</z_dof>\n')
+                file.write('    </bc>\n\n')
+       
+       
+        elif loading_type == "biaxial":
+
+            #Supporting biaxial only in symmetric gauge model until I receive confirmation on the interpretation of grip constarined model
+            if loading_mode != "symmetric_gauge":
+                raise ValueError("biaxial loading only supports loading_mode='symmetric_gauge'")
+
+            if symmetry == "full":
+
+                # Pull in x direction
+                file.write('    <bc name="pull_left_x" node_set="left_face" type="prescribed displacement">\n')
+                file.write('      <dof>x</dof>\n')
+                file.write(f'      <value lc="1">{-prescribed_displacement_x}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+                file.write('    <bc name="pull_right_x" node_set="right_face" type="prescribed displacement">\n')
+                file.write('      <dof>x</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_x}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+                # Pull in y direction
+                file.write('    <bc name="pull_front_y" node_set="front_face" type="prescribed displacement">\n')
+                file.write('      <dof>y</dof>\n')
+                file.write(f'      <value lc="1">{-prescribed_displacement_y}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+                file.write('    <bc name="pull_back_y" node_set="back_face" type="prescribed displacement">\n')
+                file.write('      <dof>y</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_y}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+
+            elif symmetry == "half":
+
+                # x symmetry
+                file.write('    <bc name="symmetry_x" node_set="symmetry_x" type="zero displacement">\n')
+                file.write('      <x_dof>1</x_dof>\n')
+                file.write('      <y_dof>0</y_dof>\n')
+                file.write('      <z_dof>0</z_dof>\n')
+                file.write('    </bc>\n\n')
+
+                # Pull in x direction
+                file.write('    <bc name="pull_right_x" node_set="right_face" type="prescribed displacement">\n')
+                file.write('      <dof>x</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_x}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+                # Pull in y direction
+                file.write('    <bc name="pull_front_y" node_set="front_face" type="prescribed displacement">\n')
+                file.write('      <dof>y</dof>\n')
+                file.write(f'      <value lc="1">{-prescribed_displacement_y}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+                file.write('    <bc name="pull_back_y" node_set="back_face" type="prescribed displacement">\n')
+                file.write('      <dof>y</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_y}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+
+            elif symmetry == "quarter":
+
+                # x symmetry
+                file.write('    <bc name="symmetry_x" node_set="symmetry_x" type="zero displacement">\n')
+                file.write('      <x_dof>1</x_dof>\n')
+                file.write('      <y_dof>0</y_dof>\n')
+                file.write('      <z_dof>0</z_dof>\n')
+                file.write('    </bc>\n\n')
+
+                # y symmetry
+                file.write('    <bc name="symmetry_y" node_set="symmetry_y" type="zero displacement">\n')
+                file.write('      <x_dof>0</x_dof>\n')
+                file.write('      <y_dof>1</y_dof>\n')
+                file.write('      <z_dof>0</z_dof>\n')
+                file.write('    </bc>\n\n')
+
+                # Pull in positive x and y directions
+                file.write('    <bc name="pull_right_x" node_set="right_face" type="prescribed displacement">\n')
+                file.write('      <dof>x</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_x}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+
+                file.write('    <bc name="pull_back_y" node_set="back_face" type="prescribed displacement">\n')
+                file.write('      <dof>y</dof>\n')
+                file.write(f'      <value lc="1">{prescribed_displacement_y}</value>\n')
+                file.write('      <relative>0</relative>\n')
+                file.write('    </bc>\n\n')
+            else:
+                raise ValueError("symmetry must be 'full', 'half', or 'quarter'")
+            
+            file.write('    <bc name="fix_z_anchor" node_set="z_anchor" type="zero displacement">\n')
+            file.write('      <x_dof>0</x_dof>\n')
+            file.write('      <y_dof>0</y_dof>\n')
+            file.write('      <z_dof>1</z_dof>\n')
+            file.write('    </bc>\n\n')
 
         file.write('  </Boundary>\n\n')
 
+        
         # Load curve ramps prescribed displacement from 0 to full value over the step
         # LOAD DATA
         file.write('  <LoadData>\n')

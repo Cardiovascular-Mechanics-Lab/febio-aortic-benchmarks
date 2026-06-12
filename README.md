@@ -1,17 +1,41 @@
-Current features:
-- Structured Hex8 mesh generation
-- Boundary-condition node group generation
-- FEBio XML writing
-- Procedural uniaxial test generation (reproduced model created using FEBio GUI)
+# FEBio Aortic Tissue Benchmark
 
-Future goals:
-- Symmetry options based on user customization
-- Differentiating layer material properties
-- Constitutive model selection
-- Multiple element types
-- Biaxial loading
-- Automated postprocessing
+## Current features:
+- Structured Hex8 mesh generation of a simple sheet
+- Full, half, and quarter specimen symmetry models 
+- Uniaxial & Biaxial loading models 
+- Boundary conditions that support gauge region modeling and grip-constrained modeling (for full specimen model only)
+- 1-, 2-, 3-layer tissue models
+    - Layer-specific Neo-Hookean material properties 
+- Automated FEBio input file generation
 
-# febio-aortic-benchmarks
-Python scripts that generate FEBio input files for aortic benchmark problems
+## Project structure 
+
+main.py
+- user configuration file 
+
+mesh/
+- nodes.py
+- elements.py
+- BC_groups.py 
+
+febio/
+- writer.py 
+
+models/
+- generated .feb files 
+
+## Running the Code
+
+1. Configure geometry, materials, symmetry and loading in 'main.py'
+2. Run: 
+    ''' bash 
+    python main.py
+    '''
+3. Open the generated '.feb' file in FEBio Studio (file saved in 'models/')
+4. Run the simulation using FEBio 
+
+## Future work:
+
+- Current material model: Neo-Hookean, future work will implement HGO models as well (and others?)
 
