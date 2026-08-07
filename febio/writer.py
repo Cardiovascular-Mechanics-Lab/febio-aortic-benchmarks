@@ -1,14 +1,17 @@
-def write_mesh_feb(filename, nodes, elements, BC_groups, material_type, density, layers, num_layers, prescribed_displacement_x, prescribed_displacement_y, time_steps, step_size, layer_element_groups, symmetry, loading_type, loading_mode):
+from febio.material_writers import write_neo_hookean, write_HGO
+
+def write_mesh_feb(filename, base_filename, nodes, elements, BC_groups, material_model, density, layers, num_layers, prescribed_displacement_x, prescribed_displacement_y, time_steps, step_size, layer_element_groups, symmetry, loading_type, loading_mode):
 
     """
     Writes a FEBio .feb input file for a layered rectangular specimen based on user input from main.py..
 
     Parameters:
         filename: output .feb file name
+        base_filename: base file name for the model (used for standard naming of output files)
         nodes: array containing [node_id, x, y, z]
         elements: array containing [element_id, n1, ..., n8]
         BC_groups: dictionary of node sets used for boundary conditions
-        material_type: FEBio material model name
+        material_model: FEBio material model name
         density: material density used for all layers
         layers: list of layer dictionaries containing name, fraction, E, and v
         num_layers: number of material layers
@@ -28,9 +31,11 @@ def write_mesh_feb(filename, nodes, elements, BC_groups, material_type, density,
         file.write('<febio_spec version="4.0">\n\n')
 
         # MODULE
-        file.write('  <Module type="solid"/>\n\n')
+        file.write('  <Module type="solid">\n')
+        file.write('    <units>mm-N-s</units>\n')
+        file.write('  </Module>\n\n')
 
-        # Static solid mechanics analysis settings
+        # Static solid mechanics analysis settingss
         # CONTROL SECTION
         file.write('  <Control>\n')
 
@@ -56,16 +61,15 @@ def write_mesh_feb(filename, nodes, elements, BC_groups, material_type, density,
         file.write('  <Material>\n')
 
         for i, layer in enumerate(layers, start=1):
-            file.write(
-                f'    <material id="{i}" '
-                f'name="{layer["name"]}" '
-                f'type="{material_type}">\n'
-            )
 
-            file.write(f'      <density>{density}</density>\n')
-            file.write(f'      <E>{layer["E"]}</E>\n')
-            file.write(f'      <v>{layer["v"]}</v>\n')
-            file.write('    </material>\n\n')
+            if material_model == "neo_hookean":
+                write_neo_hookean(file, layer, i, density)
+
+            elif material_model == "hgo":
+                write_HGO(file, layer, i, density)
+
+            else:
+                raise ValueError(f"Unknown material type: {material_model}")
 
         file.write('  </Material>\n\n')
         
@@ -363,8 +367,13 @@ def write_mesh_feb(filename, nodes, elements, BC_groups, material_type, density,
         file.write('      <var type="stress"/>\n')
         file.write('      <var type="Lagrange strain"/>\n')
         file.write('      <var type="relative volume"/>\n')
+        file.write('      <var type="reaction forces"/>\n')
         file.write('    </plotfile>\n')
+        file.write('    <logfile>\n')
+        file.write(f'      <node_data data="Rx" file="{base_filename}_Rx_data.txt" node_set="right_face"/>\n')
+        file.write('    </logfile>\n')
         file.write('  </Output>\n\n')
+
 
         file.write('</febio_spec>\n')
 

@@ -41,50 +41,111 @@ def generate_elements(nx, ny, nz):
     #returns list of elements as an array
     return np.array(elements, dtype=int)
 
+from itertools import product
+
+
+def _allocate_thickness_rows(layer_fractions, total_rows):
+    """
+    Convert layer fractions into positive integer element-row counts.
+
+    The returned counts:
+        - sum to total_rows;
+        - assign at least one row to every layer;
+        - minimize the squared difference between the requested and
+          represented layer fractions.
+    """
+
+    num_layers = len(layer_fractions)
+
+    if total_rows < num_layers:
+        raise ValueError(
+            "The mesh does not contain enough through-thickness element "
+            "rows to assign at least one row to every layer. "
+            "Increase nodes_z."
+        )
+
+    best_counts = None
+    best_error = float("inf")
+
+    # Each count must be at least 1. The final count is calculated
+    # from the remaining rows so that the total always matches.
+    for leading_counts in product(
+        range(1, total_rows + 1),
+        repeat=num_layers - 1,
+    ):
+        final_count = total_rows - sum(leading_counts)
+
+        if final_count < 1:
+            continue
+
+        counts = list(leading_counts) + [final_count]
+
+        error = sum(
+            ((count / total_rows) - fraction) ** 2
+            for count, fraction in zip(counts, layer_fractions)
+        )
+
+        if error < best_error:
+            best_error = error
+            best_counts = counts
+
+    if best_counts is None:
+        raise ValueError(
+            "A valid through-thickness layer allocation could not be found."
+        )
+
+    return best_counts
+
+
 def split_elements_by_thickness(elements, nx, ny, nz, layers):
     """
-    Assigns elements to tissue layers based on their position through the specimen thickness.
+    Assign elements to anatomical layers according to their position
+    through the specimen thickness.
 
-    The thickness is in z-direction.
+    The thickness direction is z.
 
-    elements: array containing [element_id, n1, n2, n3, n4, n5, n6, n7, n8]
-    nx, ny, nz: number of nodes in each direction
-    layers: list of dictionaries, each with:
-        "name"
-        "fraction"
-        "E"
-        "v"
+    Parameters
+    ----------
+    elements:
+        Array containing
+        [element_id, n1, n2, n3, n4, n5, n6, n7, n8].
 
-    Returns:
-        layer_element_groups: list where each entry contains the elements
-        assigned to the corresponding layer.
-        Example for 3 layers:
-        [
-            intima elements,
-            media elements,
-            adventitia elements
-        ]
+    nx, ny, nz:
+        Numbers of nodes in the x, y, and z directions.
+
+    layers:
+        List of assembled layer dictionaries. Each layer must contain:
+            - "name"
+            - "fraction"
+
+        Material parameters may also be present but are not used by
+        this function.
+
+    Returns
+    -------
+    list
+        One element group per anatomical layer, in the same order as
+        the input layer list.
     """
 
-    #Number of elements per layer in thickness direction
-    elements_per_thickness_layer = (nx - 1) * (ny - 1)
+    elements_per_thickness_row = (nx - 1) * (ny - 1)
+    total_thickness_rows = nz - 1
 
-    #Elements through thickness direction
-    total_thickness_elements = nz - 1
-
-    # Convert user-defined layer fractions into number of element layers
-    # rounds to nearest integer, and adjusts last layer to ensure total matches nz-1
-    layer_counts = [
-        round(layer["fraction"] * total_thickness_elements)
+    layer_fractions = [
+        layer["fraction"]
         for layer in layers
     ]
 
-    # Making sure rounding does not lose/add layers
-    difference = total_thickness_elements - sum(layer_counts)
-    layer_counts[-1] += difference
+    layer_counts = _allocate_thickness_rows(
+        layer_fractions,
+        total_thickness_rows,
+    )
 
-    #Converts layer counts into cumulative boundaries
-    # Example: number of elements per layer ([7, 2, 1]) becomes elements at boundaries ([7, 9, 10])
+    # Convert row counts into cumulative boundaries.
+    #
+    # Example:
+    #     counts = [3, 1]
+    #     boundaries = [3, 4]
     layer_boundaries = []
     running_total = 0
 
@@ -92,18 +153,22 @@ def split_elements_by_thickness(elements, nx, ny, nz, layers):
         running_total += count
         layer_boundaries.append(running_total)
 
-    #element group per selected tissue layers
-    layer_element_groups = [[] for _ in layers]
+    layer_element_groups = [
+        []
+        for _ in layers
+    ]
 
-    #assigns elements to correct layer group based on their position in the thickness direction
     for element in elements:
         element_id = int(element[0])
         element_index = element_id - 1
 
-        thickness_layer = element_index // elements_per_thickness_layer
+        thickness_row = (
+            element_index
+            // elements_per_thickness_row
+        )
 
         for layer_index, boundary in enumerate(layer_boundaries):
-            if thickness_layer < boundary:
+            if thickness_row < boundary:
                 layer_element_groups[layer_index].append(element)
                 break
 

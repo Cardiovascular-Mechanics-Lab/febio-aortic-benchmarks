@@ -6,12 +6,20 @@ __pycache__/
 .venv/
 
 # FEBio outputs
+jobs/
 *.xplt
 *.log
 *.plt
+
+# FEBio generated models
+generated_models/*
+!generated_models/.gitkeep
 
 # VS Code
 .vscode/
 
 # Windows
 Thumbs.db
+
+# Post-processing files
+post_processing/

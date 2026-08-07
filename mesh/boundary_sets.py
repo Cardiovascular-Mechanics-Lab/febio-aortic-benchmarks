@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def generate_BCgroups(nodes, symmetry, tolerance=1e-8):
+def generate_boundary_sets(nodes, symmetry, tolerance=1e-8):
 
     """
     Generates node groups for specimen faces and edges

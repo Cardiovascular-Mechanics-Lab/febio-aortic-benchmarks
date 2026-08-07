@@ -1,168 +1,433 @@
 """
 main.py
 
-User-facing configuration file for generating FEBio input files.
+User-facing script for generating an FEBio input file for a layered
+arterial tissue specimen.
 
-This script defines the specimen geometry, mesh density, layer structure,
-material properties, symmetry option, and loading configuration. It then
-calls the mesh generation, layer assignment, boundary condition grouping,
-and FEBio writer functions to create a .feb model file.
+Workflow:
+    1. Define the model settings in this file.
+    2. Edit layer-specific constitutive parameters in
+       febio/material_library.py, if required.
+    3. Save the changes and run this file.
+    4. Open the generated .feb file in FEBio Studio.
+
+Unit convention:
+    Length: mm
+    Force: N
+    Stress: MPa
+
+Coordinate convention:
+    x: specimen length and primary loading direction
+    y: specimen width and secondary loading direction
+    z: specimen thickness
+
+All geometry dimensions describe the full specimen. Half- and
+quarter-symmetry geometries are calculated internally.
 """
 
-from mesh.nodes import generate_nodes
-from mesh.elements import generate_elements
-from mesh.BC_groups import generate_BCgroups
+from pathlib import Path
+import re
+
+from febio.material_processing import get_material_layers
 from febio.writer import write_mesh_feb
-from mesh.elements import split_elements_by_thickness
-
-# USER INPUTS 
-
-#Full specimen dimensions
-length = 20  #mm
-width = 10   #mm   
-thickness = 1   #mm
-
-#Mesh density 
-#nx, ny, and nz are the number of nodes in each direction, 
-# therefore the number of elements in each direction are nx-1, ny-1, and nz-1 respectively.
-
-nx = 21  
-ny = 7   
-nz = 11  
-
-#Layer parameters
-
-# options: 1 (single homogeneous layer), 2 (intima-media and adventitia), 3 (intima, media, adventitia)
-num_layers = 3
-
-#User defined parameters for their chosen layer configuration (according to neo-Hookean material model only)
-#Each layer has:
-# - name: material name for FEBio file
-# - fraction: fraction of total thickness occupied by the layer
-# - E: Young's modulus
-# - v: Poisson's ratio
-
-if num_layers == 1:
-    layers = [
-        {
-            "name": "Single Layer",
-            "fraction": 1.0, 
-            "E": 1,
-            "v": 0.49
-        }
-    ]
-
-elif num_layers == 2:
-    layers = [
-        #Intima-Media layer properties
-        {
-            "name": "Intima-Media",
-            "fraction": 0.9,
-            "E": 1,
-            "v": 0.49
-        },
-        #Adventitia layer properties
-        {
-            "name": "Adventitia",
-            "fraction": 0.1,
-            "E": 1,
-            "v": 0.4
-        }
-    ]
-
-elif num_layers == 3:
-    layers = [
-        #Intima layer properties
-        {
-            "name": "Intima",
-            "fraction": 0.2,
-            "E": 0.5,
-            "v": 0.49
-        },
-
-        #Media layer properties
-        {
-            "name": "Media",
-            "fraction": 0.5,
-            "E": 1,
-            "v": 0.49
-        },
-
-        #Adventitia layer properties
-        {
-            "name": "Adventitia",
-            "fraction": 0.3,
-            "E": 1,
-            "v": 0.4
-        }
-    ]
-else: 
-    raise ValueError("Invalid number of layers. Please choose 1, 2, or 3.")
-  
-#Check that user-defined layer fractions add to 1.0
-total_fraction = sum(layer["fraction"] for layer in layers)
-
-if abs(total_fraction - 1.0) > 1e-8:
-    raise ValueError("Layer fractions must add to 1.0")
-
-#Material model settings
-# Currently the same for all layers and layer configurations for now
-
-material_type = "neo-Hookean" #Same for all layers and layer configurations
-density = 1
+from mesh.boundary_sets import generate_boundary_sets
+from mesh.elements import (
+    generate_elements,
+    split_elements_by_thickness,
+)
+from mesh.nodes import generate_nodes
+from validation import validate_inputs
 
 
-#Model Symmetry 
+# -------------------------------------------------------------------------
+# FULL SPECIMEN GEOMETRY
+# -------------------------------------------------------------------------
 
-#Options: 
-# "full": full specimen
-# "half": x=0 symmetry plane
-# "quarter": x=0 and y=0 symmetry planes
-symmetry = "full"  
+geometry = {
+    "length": 10.0,
+    "width": 3.0,
+    "thickness": 0.5,
+}
 
-#Loading 
 
-#Options: 
-# "uniaxial": Loading in x-direction only
-# "biaxial": Loading in both x and y directions
-loading_type = "uniaxial"
-
-#Options: 
-# "symmetric_gauge": represents gauge region loading
-# "grip_constrained": Simulates grip behvaiour, intented for full, unaxial model only
-loading_mode = "symmetric_gauge" 
-
-# Prescribed displacement magnitudes
-# Represents half-specimen displacements, i.e. displacement per side.
+# -------------------------------------------------------------------------
+# MESH
 #
-# E.g. For a full symmetric model (uniaxial)
-#   left face  = -prescribed_displacement_x
-#   right face = +prescribed_displacement_x
+# Values represent the number of nodes in each direction.
 #
-# E.g. For half/quarter models (uniaxial):
-#   symmetry plane = zero normal displacement
-#   loaded face    = +prescribed_displacement_x
-prescribed_displacement_x = 5 #mm, HALF model displacement in x (i.e. displacement per side of full specimen)
-prescribed_displacement_y = 5  #mm, HALF model displacement in y (i.e. displacement per side of full specimen)
+# Number of elements:
+#     x direction = nodes_x - 1
+#     y direction = nodes_y - 1
+#     z direction = nodes_z - 1
+# -------------------------------------------------------------------------
 
-#Time steps
-time_steps = 10 
-step_size = 0.1
+mesh = {
+    "nodes_x": 41,
+    "nodes_y": 21,
+    "nodes_z": 5,
+}
 
-#Output file 
-output_filename = f"models/sheet_{loading_type}_L{num_layers}_{symmetry}_{loading_mode}.feb"
+
+# -------------------------------------------------------------------------
+# MATERIAL MODEL
+#
+# The selected constitutive model is applied to every layer, but the
+# material parameters may vary between layers.
+#
+# Currently supported:
+#     "neo_hookean"
+#     "hgo"
+#
+# Edit layer-specific parameters in febio/material_library.py.
+# -------------------------------------------------------------------------
+
+material = {
+    "model": "hgo",
+    "density": 1.0,        # units tonne/mm^3
+}
 
 
-nodes = generate_nodes(length, width, thickness, nx, ny, nz, symmetry)
-elements = generate_elements(nx, ny, nz)
-layer_element_groups = split_elements_by_thickness(elements, nx, ny, nz, layers)
-BC_groups = generate_BCgroups(nodes, symmetry)
+# -------------------------------------------------------------------------
+# LAYER CONFIGURATION
+#
+# Supported anatomical structures:
+#
+#     1 layer:
+#         Arterial Tissue
+#
+#     2 layers:
+#         Intima-Media
+#         Adventitia
+#
+#     3 layers:
+#         Intima
+#         Media
+#         Adventitia
+#
+# Fractions are listed in the same order as the anatomical names above.
+# Fractions must be positive decimals that sum to 1.0.
+# -------------------------------------------------------------------------
 
-#Basic model summary for user reference
-print("Nodes:", len(nodes))
-print("Elements:", len(elements))
-print("BC Groups:", len(BC_groups))
+layers = {
+    "number": 1,
+    "fractions": [1.0],
+}
 
-write_mesh_feb(output_filename, nodes, elements, BC_groups, material_type, density, layers, num_layers, prescribed_displacement_x, prescribed_displacement_y, time_steps, step_size, layer_element_groups, symmetry, loading_type, loading_mode)
 
-print("FEBio file written: {}".format(output_filename))
+# -------------------------------------------------------------------------
+# LOADING AND SYMMETRY
+#
+# symmetry options:
+#     "full"
+#     "half"
+#     "quarter"
+#
+# loading type options:
+#     "uniaxial"
+#     "biaxial"
+#
+# loading mode options:
+#     "symmetric_gauge"
+#     "grip_constrained"
+#
+# Valid combinations:
+#
+#     uniaxial + symmetric_gauge:
+#         full, half, or quarter
+#
+#     uniaxial + grip_constrained:
+#         full only
+#
+#     biaxial + symmetric_gauge:
+#         full, half, or quarter
+#
+#     biaxial + grip_constrained:
+#         not supported
+#
+# Prescribed displacements represent displacement per side of the
+# corresponding full specimen. Unused displacement values may remain
+# defined.
+# -------------------------------------------------------------------------
+
+symmetry = "full"
+
+loading = {
+    "type": "uniaxial",
+    "mode": "grip_constrained",
+    "displacement_x": 0.15,
+    "displacement_y": 0.15,
+}
+
+
+# -------------------------------------------------------------------------
+# ANALYSIS CONTROL
+#
+# Final analysis time = time_steps * step_size
+# -------------------------------------------------------------------------
+
+analysis = {
+    "time_steps": 20,
+    "step_size": 0.05,
+}
+
+
+# -------------------------------------------------------------------------
+# OUTPUT
+#
+# Enter the model name without the .feb extension.
+# Generated files are saved in generated_models/.
+#
+# If the filename already exists, a number is appended automatically.
+# Example:
+#     hgo_full_symmetric.feb
+#     hgo_full_symmetric_2.feb
+# -------------------------------------------------------------------------
+
+output = {
+    "model_name": "hgo_validation",
+}
+
+
+######################## END OF USER-INPUT SECTION ########################
+
+# -------------------------------------------------------------------------
+# MODEL ASSEMBLY
+# -------------------------------------------------------------------------
+
+def normalize_material_model(model_name: str) -> str:
+    """Convert material-model labels to a consistent internal form."""
+
+    return (
+        model_name
+        .strip()
+        .lower()
+        .replace("-", "_")
+        .replace(" ", "_")
+    )
+
+
+def create_unique_output_path(
+    model_name: str,
+    output_directory: str = "generated_models",
+) -> tuple[str, Path]:
+    """
+    Create a unique FEBio output path.
+
+    The output directory is intentionally not included in the main
+    user-input section, but may be changed here if required.
+    """
+
+    sanitized_name = model_name.strip()
+
+    if sanitized_name.lower().endswith(".feb"):
+        sanitized_name = sanitized_name[:-4]
+
+    sanitized_name = re.sub(
+        r"[^A-Za-z0-9_-]+",
+        "_",
+        sanitized_name,
+    ).strip("_")
+
+    if not sanitized_name:
+        raise ValueError(
+            'output["model_name"] does not contain any valid '
+            "filename characters."
+        )
+
+    directory = Path(output_directory)
+    directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    candidate = directory / f"{sanitized_name}.feb"
+    counter = 2
+
+    while candidate.exists():
+        candidate = directory / f"{sanitized_name}_{counter}.feb"
+        counter += 1
+
+    return candidate.name, candidate
+
+
+def print_model_summary(
+    *,
+    material_layers,
+    nodes,
+    elements,
+    layer_element_groups,
+    boundary_sets,
+    output_path,
+) -> None:
+    """Print a summary of the generated model."""
+
+    final_time = (
+        analysis["time_steps"]
+        * analysis["step_size"]
+    )
+
+    print("\nFEBio model summary")
+    print("===================")
+
+    print(f'Model name:       {output["model_name"]}')
+    print(f"Output path:      {output_path}")
+
+    print("\nGeometry")
+    print("--------")
+    print(f'Length:           {geometry["length"]}')
+    print(f'Width:            {geometry["width"]}')
+    print(f'Thickness:        {geometry["thickness"]}')
+    print(f"Symmetry:         {symmetry}")
+
+    print("\nMesh")
+    print("----")
+    print(f'Nodes in x:       {mesh["nodes_x"]}')
+    print(f'Nodes in y:       {mesh["nodes_y"]}')
+    print(f'Nodes in z:       {mesh["nodes_z"]}')
+    print(f"Total nodes:      {len(nodes)}")
+    print(f"Total elements:   {len(elements)}")
+
+    print("\nMaterial")
+    print("--------")
+    print(f'Model:            {material["model"]}')
+    print(f'Density:          {material["density"]}')
+    print(f'Layers:           {layers["number"]}')
+
+    for layer, element_group in zip(
+        material_layers,
+        layer_element_groups,
+    ):
+        print(
+            f'  {layer["name"]}: '
+            f'fraction={layer["fraction"]}, '
+            f'elements={len(element_group)}'
+        )
+
+    print("\nLoading")
+    print("-------")
+    print(f'Type:             {loading["type"]}')
+    print(f'Mode:             {loading["mode"]}')
+    print(
+        f'Displacement x:   {loading["displacement_x"]}'
+    )
+    print(
+        f'Displacement y:   {loading["displacement_y"]}'
+    )
+
+    print("\nAnalysis")
+    print("--------")
+    print(f'Time steps:       {analysis["time_steps"]}')
+    print(f'Step size:        {analysis["step_size"]}')
+    print(f"Final time:       {final_time}")
+    print(f"Boundary sets:    {len(boundary_sets)}")
+
+
+def generate_model() -> Path:
+    """Validate, assemble, and write the configured FEBio model."""
+
+    validate_inputs(
+    geometry=geometry,
+    mesh=mesh,
+    material=material,
+    layers=layers,
+    symmetry=symmetry,
+    loading=loading,
+    analysis=analysis,
+    output=output,
+)
+
+    normalized_material_model = normalize_material_model(
+        material["model"]
+    )
+
+    material_layers = get_material_layers(
+        material_model=normalized_material_model,
+        num_layers=layers["number"],
+        layer_fractions=layers["fractions"],
+    )
+
+    base_filename, output_path = create_unique_output_path(
+        output["model_name"]
+    )
+
+    nodes = generate_nodes(
+        geometry["length"],
+        geometry["width"],
+        geometry["thickness"],
+        mesh["nodes_x"],
+        mesh["nodes_y"],
+        mesh["nodes_z"],
+        symmetry,
+    )
+
+    elements = generate_elements(
+        mesh["nodes_x"],
+        mesh["nodes_y"],
+        mesh["nodes_z"],
+    )
+
+    layer_element_groups = split_elements_by_thickness(
+        elements,
+        mesh["nodes_x"],
+        mesh["nodes_y"],
+        mesh["nodes_z"],
+        material_layers,
+    )
+
+    boundary_sets = generate_boundary_sets(
+        nodes,
+        symmetry,
+    )
+
+    print_model_summary(
+        material_layers=material_layers,
+        nodes=nodes,
+        elements=elements,
+        layer_element_groups=layer_element_groups,
+        boundary_sets=boundary_sets,
+        output_path=output_path,
+    )
+
+    write_mesh_feb(
+        str(output_path),
+        base_filename,
+        nodes,
+        elements,
+        boundary_sets,
+        normalized_material_model,
+        material["density"],
+        material_layers,
+        layers["number"],
+        loading["displacement_x"],
+        loading["displacement_y"],
+        analysis["time_steps"],
+        analysis["step_size"],
+        layer_element_groups,
+        symmetry,
+        loading["type"],
+        loading["mode"],
+    )
+
+    return output_path
+
+
+def main() -> None:
+    """Run the arterial tissue model generator."""
+
+    try:
+        output_path = generate_model()
+
+    except ValueError as error:
+        print("\nConfiguration error")
+        print("===================")
+        print(error)
+        raise SystemExit(1) from error
+
+    print(
+        "\nFEBio input file created successfully:"
+        f"\n{output_path}"
+    )
+
+
+if __name__ == "__main__":
+    main()
