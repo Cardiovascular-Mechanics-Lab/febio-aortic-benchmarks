@@ -4,7 +4,7 @@ This repository provides an open-source Python workflow for generating FEBio inp
 
 The current implementation creates structured rectangular tissue models that can be configured for different geometries, mesh densities, constitutive material models, anatomical layer structures, loading conditions, and symmetry representations.
 
-The generated `.feb` files can be opened and solved using FEBio Studio.
+The generated `.feb` files can be opened in FEBio Studio and solved using the FEBio solver.
 
 ---
 
@@ -13,7 +13,7 @@ The generated `.feb` files can be opened and solved using FEBio Studio.
 - Structured Hex8 mesh generation for rectangular tissue specimens
 - Full, half, and quarter symmetry models
 - Uniaxial and biaxial loading
-- Gauge-region and grip-constrained boundary-condition options
+- Symmetric-gauge and grip-constrained loading modes
 - One-, two-, and three-layer arterial tissue structures
 - Automatic anatomical layer naming
     - 1 layer: Arterial Tissue
@@ -23,7 +23,9 @@ The generated `.feb` files can be opened and solved using FEBio Studio.
 - Supported constitutive material models
     - Neo-Hookean
     - Holzapfel-Gasser-Ogden (HGO)
-- Automatic validation of user inputs
+    - Fung orthotropic
+- User-defined local material reference direction for HGO and Fung orthotropic material models
+- Automatic validation of user inputs and material parameters
 - Automated generation of FEBio input files
 - Automatic filename numbering to prevent overwriting existing models
 - Printed model summary after successful model generation
@@ -35,9 +37,10 @@ The generated `.feb` files can be opened and solved using FEBio Studio.
 ```text
 .
 ├── main.py
-├── validation.py
+├── input_validation.py
 ├── README.md
 ├── requirements.txt
+├── LICENSE
 │
 ├── febio/
 │   ├── material_library.py
@@ -50,7 +53,14 @@ The generated `.feb` files can be opened and solved using FEBio Studio.
 │   ├── elements.py
 │   └── boundary_sets.py
 │
+├── documents/
+│   ├── MATERIAL_MODEL_VERIFICATION.md
+│   ├── FUNG_PARAMETER_CONVERSION.xlsx
+│   └── figures/
+│
 └── generated_models/
+    ├── example_fung_3layer_biaxial_quarter.feb
+    └── example_neo_hookean_2layer_uniaxial_half.feb
 ```
 
 ## main.py
@@ -79,15 +89,9 @@ Run this file to generate the FEBio input file.
 
 Secondary user-facing file.
 
-Contains the constitutive material parameters for each supported material model.
+Contains the constitutive material parameters for each supported material model. Parameter values are defined for the anatomical layers supported by the one-, two-, and three-layer configurations.
 
-Parameters are organized by:
-
-- material model
-- number of layers
-- anatomical layer
-
-The same constitutive model is applied to every layer, while parameter values may vary between layers.
+The number of active layers and their thickness fractions are selected in `main.py`. The same constitutive model is applied to every layer, while parameter values may vary between layers.
 
 ---
 
@@ -102,20 +106,32 @@ Internal module that:
 
 ---
 
-## validation.py
+## febio/material_writers.py
 
-Validates:
+Internal module containing the FEBio material-definition writers for each supported constitutive material model.
+
+Currently supports:
+
+- Neo-Hookean
+- Holzapfel-Gasser-Ogden (HGO)
+- Fung orthotropic
+
+---
+
+## input_validation.py
+
+
+Validates user-defined model settings before model generation, including:
 
 - geometry
 - mesh
+- material-model selection
 - layer structure
 - loading configuration
 - analysis settings
 - output settings
 
-before the FEBio file is generated.
-
-Specific error messages are generated to support the correction of invalid entries.
+Invalid configurations generate descriptive error messages before the FEBio input file is written.
 
 ---
 
@@ -144,10 +160,20 @@ If a file with the requested model name already exists, a number is appended aut
 Example:
 
 ```text
-hgo_validation.feb
-hgo_validation_2.feb
-hgo_validation_3.feb
+hgo_verfication.feb
+hgo_verification_2.feb
+hgo_verification_3.feb
 ```
+
+---
+
+## `documents/`
+
+Contains supporting documentation for the model generator.
+
+- [`MATERIAL_MODEL_VERIFICATION.md`](documents/MATERIAL_MODEL_VERIFICATION.md) – Documents the verification of the implemented constitutive material models against published results.
+- [`FUNG_PARAMETER_CONVERSION.xlsx`](documents/FUNG_PARAMETER_CONVERSION.xlsx) – Documents the conversion of the Fung material parameters reported by Bhat & Yamada (2022) to the engineering constants required by the FEBio Fung orthotropic material model.
+- `figures/` – Contains figures used in the supporting documentation.
 
 ---
 
@@ -168,30 +194,51 @@ Unit convention:
 - Length: mm
 - Force: N
 - Stress: MPa
+- Density: tonne/mm³
 
 Users are responsible for maintaining a consistent unit system.
 
 ---
 
-# Running the Code
+# Installation and Requirements
 
-### 1. Configure the model
+This project requires Python to generate the FEBio input files and FEBio/FEBio Studio to open and solve the generated models.
 
-Edit the model settings in
+The workflow was developed and tested using **FEBio Studio 3.2.0** and the corresponding FEBio solver. Compatibility with other FEBio versions has not been verified.
 
-```text
-main.py
+[FEBio and FEBio Studio](https://febio.org/) are not included with this repository and must be installed separately.
+
+Python dependencies are listed in `requirements.txt`.
+
+To create a local Python virtual environment, navigate to the repository directory in a terminal and run:
+
+```powershell
+python -m venv .venv
 ```
 
-If necessary, edit the constitutive material parameters in
+Activate the virtual environment (Windows PowerShell):
 
-```text
-febio/material_library.py
+```powershell
+.\.venv\Scripts\Activate.ps1
 ```
+
+Install the required Python packages:
+
+```powershell
+pip install -r requirements.txt
+```
+
+> **User prerequisites:** This workflow assumes that users have basic familiarity with Python, including editing Python scripts, working with a Python environment, and running scripts from a terminal or integrated development environment (IDE). Basic familiarity with FEBio and FEBio Studio is also recommended for reviewing and running the generated models.
+
+> **Note:** This project and its Python environment were developed and tested using Visual Studio Code (VS Code). VS Code is not required to run the project; however, the setup and execution process may differ when using other IDEs or development environments.
 
 ---
 
-### 2. Activate the virtual environment
+# Running the Code
+
+### 1. Activate the virtual environment
+
+If the virtual environment is not already active, activate it before running the model generator.
 
 PowerShell:
 
@@ -201,13 +248,33 @@ PowerShell:
 
 ---
 
+### 2. Configure the model
+
+Edit the model settings in:
+
+```text
+main.py
+```
+
+Model geometry, mesh, layer structure, loading conditions, symmetry, and analysis settings are configured directly in `main.py`.
+
+If necessary, edit the constitutive material parameters in:
+
+```text
+febio/material_library.py
+```
+
+---
+
 ### 3. Generate the FEBio input file
+
+Run:
 
 ```bash
 python main.py
 ```
 
-If the model configuration is valid, a summary will be printed in the terminal and the generated `.feb` file will be saved in
+If the model configuration is valid, a summary will be printed in the terminal and the generated `.feb` file will be saved in:
 
 ```text
 generated_models/
@@ -227,8 +294,8 @@ Open the generated `.feb` file as a model in FEBio Studio and run the simulation
 
 Current material parameters:
 
-- Young's modulus, **E**
-- Poisson's ratio, **v**
+- Young's modulus, **$E$**
+- Poisson's ratio, **$\nu$**
 
 Each anatomical layer may have different parameter values.
 
@@ -236,18 +303,64 @@ Each anatomical layer may have different parameter values.
 
 ## Holzapfel-Gasser-Ogden (HGO)
 
-Current material parameters:
+Material parameters:
 
-- **c** – isotropic matrix parameter
-- **k1** – fiber stiffness parameter
-- **k2** – fiber nonlinearity parameter
-- **kappa** – fiber dispersion parameter
-- **gamma** – fiber-family angle
-- **K** – bulk modulus
+- **$c$** – isotropic matrix parameter
+- **$k_1$** – fiber stiffness parameter
+- **$k_2$** – fiber nonlinearity parameter
+- **$\kappa$** – fiber dispersion parameter
+- **$\gamma$** – fiber-family angle
+- **$K$** – bulk modulus (written as `k` in the FEBio material definition)
 
-The local material reference direction follows the element **Node 1 → Node 2** direction, which is aligned with the specimen **x-direction**.
+The local material reference direction is selected in `main.py` using `reference_direction`.
 
-The fiber angle **γ** is measured relative to this local material direction.
+- `"x"` – local material direction e1 follows the specimen x-direction
+- `"y"` – local material direction e1 follows the specimen y-direction
+
+The fiber-family angle $\gamma$ is measured relative to e1.
+
+Each anatomical layer may have a different set of HGO material parameters.
+
+---
+
+## Fung Orthotropic
+
+Material parameters:
+
+- **$E_1, E_2, E_3$** – elastic moduli along the local material directions
+- **$\nu_{12}, \nu_{23}, \nu_{31}$** – Poisson's ratios
+- **$G_{12}, G_{23}, G_{31}$** – shear moduli
+- **$c$** – exponential scaling coefficient
+- **$K$** – bulk modulus (written as `k` in the FEBio material definition)
+
+The local material axes are controlled by the `reference_direction` setting in `main.py`.
+
+- `"x"` – local material direction e1 follows the specimen x-direction
+- `"y"` – local material direction e1 follows the specimen y-direction
+
+The Fung engineering constants are interpreted relative to the resulting local material coordinate system.
+
+Each anatomical layer may have a different set of Fung material parameters.
+
+---
+
+# Material Model Verification
+
+The HGO and Fung material-model implementations were verified against previously published results.
+
+Verification cases, model configurations, parameter conversions, comparison figures, sensitivity analyses, and known limitations are documented in the [Material Model Verification](documents/MATERIAL_MODEL_VERIFICATION.md) document.
+
+## HGO
+
+The Holzapfel-Gasser-Ogden implementation was evaluated using the material parameters and force-displacement results reported by Gasser et al. (2006).
+
+The verification includes circumferential and axial specimens with and without fiber dispersion.
+
+## Fung Orthotropic
+
+The Fung orthotropic implementation was evaluated using material parameters and stress-strain results reported by Bhat & Yamada (2022).
+
+The verification includes isotropic and transversely isotropic material configurations. The conversion of the published Fung coefficients to the engineering constants required by FEBio is documented in [`FUNG_PARAMETER_CONVERSION.xlsx`](documents/FUNG_PARAMETER_CONVERSION.xlsx).
 
 ---
 
@@ -278,11 +391,9 @@ Invalid loading combinations are rejected before the FEBio file is generated.
 
 # Future Work
 
-Planned extensions include:
+Potential extensions include:
 
-- Fung constitutive material model
-- Additional arterial constitutive models
+- Additional arterial constitutive material models
 - Cylindrical tube geometry generated by mapping the rectangular mesh
-- Axial stretch boundary conditions
-- Additional benchmark and validation examples
+- Additional benchmark and verification examples
 - Optional automatic execution of the FEBio solver

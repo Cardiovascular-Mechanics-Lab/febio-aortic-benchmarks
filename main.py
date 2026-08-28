@@ -36,7 +36,7 @@ from mesh.elements import (
     split_elements_by_thickness,
 )
 from mesh.nodes import generate_nodes
-from validation import validate_inputs
+from input_validation import validate_inputs
 
 
 # -------------------------------------------------------------------------
@@ -46,7 +46,7 @@ from validation import validate_inputs
 geometry = {
     "length": 10.0,
     "width": 3.0,
-    "thickness": 0.5,
+    "thickness": 1.0,
 }
 
 
@@ -64,9 +64,8 @@ geometry = {
 mesh = {
     "nodes_x": 41,
     "nodes_y": 21,
-    "nodes_z": 5,
+    "nodes_z": 10,
 }
-
 
 # -------------------------------------------------------------------------
 # MATERIAL MODEL
@@ -77,15 +76,37 @@ mesh = {
 # Currently supported:
 #     "neo_hookean"
 #     "hgo"
+#     "fung"
 #
 # Edit layer-specific parameters in febio/material_library.py.
+#
+# Material reference direction:
+#
+#     "x" -> local material direction e1 follows the specimen x-axis
+#            FEBio local material axis-node convention: 1,2,4
+#
+#     "y" -> local material direction e1 follows the specimen y-axis
+#            FEBio local material axis-node convention: 2,3,1
+#
+# For HGO, the fiber angle gamma is measured relative to this local
+# material reference direction.
+#
+# For Fung, the engineering constants E1, E2, E3, G12, G23, G31,
+# v12, v23, and v31 are defined relative to the local material axes.
+#
+# Example HGO orientations from Gasser et al. (2006):
+#     circumferential specimen -> reference_direction = "x"
+#     axial specimen           -> reference_direction = "y"
+#
+# The reference_direction setting is used by the HGO and Fung
+# material models and ignored by the Neo-Hookean material model.
 # -------------------------------------------------------------------------
 
 material = {
     "model": "hgo",
-    "density": 1.0,        # units tonne/mm^3
+    "density": 1.0e-9,                # units tonne/mm^3
+    "reference_direction": "x",
 }
-
 
 # -------------------------------------------------------------------------
 # LAYER CONFIGURATION
@@ -142,11 +163,15 @@ layers = {
 #         full, half, or quarter
 #
 #     biaxial + grip_constrained:
-#         not supported
+#         NOT SUPPORTED
 #
-# Prescribed displacements represent displacement per side of the
-# corresponding full specimen. Unused displacement values may remain
-# defined.
+# For symmetric_gauge loading, prescribed displacements represent
+# displacement per side of the corresponding full specimen.
+#
+# For grip_constrained loading, displacement_x represents the displacement
+# applied to the loaded face while the opposite face remains fixed.
+#
+# Unused displacement values may remain defined.
 # -------------------------------------------------------------------------
 
 symmetry = "full"
@@ -154,8 +179,8 @@ symmetry = "full"
 loading = {
     "type": "uniaxial",
     "mode": "grip_constrained",
-    "displacement_x": 0.15,
-    "displacement_y": 0.15,
+    "displacement_x": 1.0,
+    "displacement_y": 0.0,
 }
 
 
@@ -163,11 +188,17 @@ loading = {
 # ANALYSIS CONTROL
 #
 # Final analysis time = time_steps * step_size
+#
+# The values below provide 100 increments over an analysis time of 1.0
+# and provided robust convergence during material-model verification.
+#
+# Users may modify either value depending on the requirements of their
+# simulation.
 # -------------------------------------------------------------------------
 
 analysis = {
-    "time_steps": 20,
-    "step_size": 0.05,
+    "time_steps": 100,
+    "step_size": 0.01,
 }
 
 
@@ -179,12 +210,12 @@ analysis = {
 #
 # If the filename already exists, a number is appended automatically.
 # Example:
-#     hgo_full_symmetric.feb
-#     hgo_full_symmetric_2.feb
+#     example_hgo_1layer_uniaxial_full.feb
+#     example_hgo_1layer_uniaxial_full_2.feb
 # -------------------------------------------------------------------------
 
 output = {
-    "model_name": "hgo_validation",
+    "model_name": "example_hgo_1layer_uniaxial_full",
 }
 
 
@@ -326,15 +357,15 @@ def generate_model() -> Path:
     """Validate, assemble, and write the configured FEBio model."""
 
     validate_inputs(
-    geometry=geometry,
-    mesh=mesh,
-    material=material,
-    layers=layers,
-    symmetry=symmetry,
-    loading=loading,
-    analysis=analysis,
-    output=output,
-)
+        geometry=geometry,
+        mesh=mesh,
+        material=material,
+        layers=layers,
+        symmetry=symmetry,
+        loading=loading,
+        analysis=analysis,
+        output=output,
+    )
 
     normalized_material_model = normalize_material_model(
         material["model"]
@@ -396,6 +427,7 @@ def generate_model() -> Path:
         boundary_sets,
         normalized_material_model,
         material["density"],
+        material["reference_direction"],
         material_layers,
         layers["number"],
         loading["displacement_x"],

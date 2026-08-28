@@ -1,25 +1,31 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
 
 # Virtual environment
 .venv/
 
-# FEBio outputs
+# FEBio solver outputs
 jobs/
 *.xplt
 *.log
 *.plt
 
-# FEBio generated models
-generated_models/*
-!generated_models/.gitkeep
+# Development files
+development/
+
+# Post-processing files
+post_processing/
 
 # VS Code
 .vscode/
 
 # Windows
 Thumbs.db
+Desktop.ini
 
-# Post-processing files
-post_processing/
+# Temporary files
+*.tmp
+*.bak
+~$*

@@ -1,5 +1,5 @@
 """
-validation.py
+input_validation.py
 
 Validation of user-defined model settings.
 """
@@ -122,7 +122,7 @@ def validate_output(output):
 
 
 def validate_material(material):
-    valid_models = {"neo_hookean", "hgo"}
+    valid_models = {"neo_hookean", "hgo", "fung"}
 
     if material["model"] not in valid_models:
         raise ValueError(
@@ -134,6 +134,14 @@ def validate_material(material):
             "material['density'] must be greater than zero."
         )
 
+    if material["model"] in {"hgo", "fung"}:
+        valid_reference_directions = {"x", "y"}
+
+        if material["reference_direction"] not in valid_reference_directions:
+            raise ValueError(
+                'material["reference_direction"] must be "x" or "y" '
+                "for the HGO and Fung material models."
+            )
 
 def validate_inputs(
     *,

@@ -7,6 +7,7 @@ Internal selection, validation, and assembly of material-layer data.
 from numbers import Real
 
 from febio.material_library import (
+    FUNG_PARAMETERS,
     HGO_PARAMETERS,
     NEO_HOOKEAN_PARAMETERS,
 )
@@ -22,12 +23,14 @@ LAYER_NAMES = {
 REQUIRED_PARAMETERS = {
     "neo_hookean": ("E", "v"),
     "hgo": ("c", "k1", "k2", "kappa", "gamma", "K"),
+    "fung": ("E1", "E2", "E3", "G12", "G23", "G31", "v12", "v23", "v31", "c", "K"),
 }
 
 
 MATERIAL_PARAMETER_LIBRARY = {
     "neo_hookean": NEO_HOOKEAN_PARAMETERS,
     "hgo": HGO_PARAMETERS,
+    "fung": FUNG_PARAMETERS,
 }
 
 
@@ -132,6 +135,26 @@ def validate_material_parameter_values(
             raise ValueError(
                 "Every HGO kappa value must lie between 0 and 1/3."
             )
+        elif material_model == "fung":
+
+            for parameter in (
+                "E1",
+                "E2",
+                "E3",
+                "G12",
+                "G23",
+                "G31",
+                "c",
+                "K",
+            ):
+                if any(
+                    value <= 0
+                    for value in parameter_block[parameter]
+                ):
+                    raise ValueError(
+                        f'Every Fung "{parameter}" value must be '
+                        "greater than zero."
+                    )
 
 
 def assemble_layers(

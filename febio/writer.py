@@ -1,7 +1,24 @@
-from febio.material_writers import write_neo_hookean, write_HGO
-
-def write_mesh_feb(filename, base_filename, nodes, elements, BC_groups, material_model, density, layers, num_layers, prescribed_displacement_x, prescribed_displacement_y, time_steps, step_size, layer_element_groups, symmetry, loading_type, loading_mode):
-
+from febio.material_writers import write_neo_hookean, write_HGO, write_Fung
+def write_mesh_feb(
+    filename,
+    base_filename,
+    nodes,
+    elements,
+    BC_groups,
+    material_model,
+    density,
+    reference_direction,
+    layers,
+    num_layers,
+    prescribed_displacement_x,
+    prescribed_displacement_y,
+    time_steps,
+    step_size,
+    layer_element_groups,
+    symmetry,
+    loading_type,
+    loading_mode,
+):
     """
     Writes a FEBio .feb input file for a layered rectangular specimen based on user input from main.py..
 
@@ -13,6 +30,7 @@ def write_mesh_feb(filename, base_filename, nodes, elements, BC_groups, material
         BC_groups: dictionary of node sets used for boundary conditions
         material_model: FEBio material model name
         density: material density used for all layers
+        reference_direction: HGO local material reference direction,"x" or "y"
         layers: list of layer dictionaries containing name, fraction, E, and v
         num_layers: number of material layers
         prescribed_displacement_x: prescribed displacement in x direction
@@ -35,29 +53,67 @@ def write_mesh_feb(filename, base_filename, nodes, elements, BC_groups, material
         file.write('    <units>mm-N-s</units>\n')
         file.write('  </Module>\n\n')
 
-        # Static solid mechanics analysis settingss
+        # Static solid mechanics analysis settings
+               # -----------------------------------------------------------------
         # CONTROL SECTION
+        #
+        # Static analysis settings and nonlinear solution controls.
+        #
+        # The automatic time-stepper settings below were found to provide
+        # robust convergence during HGO verification against Gasser et al. (2006)
+        # -----------------------------------------------------------------------
+
         file.write('  <Control>\n')
 
         file.write('    <analysis type="static"/>\n')
 
-        file.write(f'    <time_steps>{time_steps}</time_steps>\n')
-        file.write(f'    <step_size>{step_size}</step_size>\n')
+        file.write(
+            f'    <time_steps>{time_steps}</time_steps>\n'
+        )
+        file.write(
+            f'    <step_size>{step_size}</step_size>\n'
+        )
 
-        file.write('    <solver>\n')
+        # Automatic time stepping
+        file.write('    <time_stepper type="default">\n')
+        file.write('      <max_retries>25</max_retries>\n')
+        file.write('      <opt_iter>11</opt_iter>\n')
+        file.write('      <dtmin>0</dtmin>\n')
+        file.write('      <dtmax>0.1</dtmax>\n')
+        file.write('      <aggressiveness>-2</aggressiveness>\n')
+        file.write('      <cutback>0.5</cutback>\n')
+        file.write('      <dtforce>0</dtforce>\n')
+        file.write('    </time_stepper>\n')
+
+        # Nonlinear solid solver
+        file.write('    <solver type="solid">\n')
         file.write('      <max_refs>25</max_refs>\n')
-        file.write('      <diverge_reform>1</diverge_reform>\n')
-        file.write('      <reform_each_time_step>1</reform_each_time_step>\n')
+        file.write(
+            '      <diverge_reform>1</diverge_reform>\n'
+        )
+        file.write(
+            '      <reform_each_time_step>1'
+            '</reform_each_time_step>\n'
+        )
+
+        file.write('      <qn_method type="BFGS">\n')
+        file.write('        <max_ups>10</max_ups>\n')
+        file.write('        <max_buffer_size>0</max_buffer_size>\n')
+        file.write('        <cycle_buffer>1</cycle_buffer>\n')
+        file.write('        <cmax>100000</cmax>\n')
+        file.write('      </qn_method>\n')
+
         file.write('    </solver>\n')
 
         file.write('  </Control>\n\n')
 
         # MATERIAL SECTION
-        
+
         if len(layers) != num_layers:
             raise ValueError(
                 f"num_layers={num_layers} but layers contains {len(layers)} entries"
             )
+
         file.write('  <Material>\n')
 
         for i, layer in enumerate(layers, start=1):
@@ -66,7 +122,22 @@ def write_mesh_feb(filename, base_filename, nodes, elements, BC_groups, material
                 write_neo_hookean(file, layer, i, density)
 
             elif material_model == "hgo":
-                write_HGO(file, layer, i, density)
+                write_HGO(
+                    file,
+                    layer,
+                    i,
+                    density,
+                    reference_direction,
+                )
+
+            elif material_model == "fung":
+                write_Fung(
+                    file,
+                    layer,
+                    i,
+                    density,
+                    reference_direction,
+                )
 
             else:
                 raise ValueError(f"Unknown material type: {material_model}")
