@@ -149,12 +149,12 @@ The publication is not included in this repository. Users should consult the ori
 This verification focused on reproducing the equibiaxial stress-strain behaviour reported in the publication. Three material configurations were considered:
 
 - Isotropic model: specimen CNc3P_53, Table 2a
-- Transversely isotropic model (isotropic in the $x_1$-$x_2$ plane): specimen CNc3P_53, Table 2b
-- Transversely isotropic model (isotropic in the $x_2$-$x_3$ plane): specimen CNd1_65, Table 2e
+- Transversely isotropic model (isotropic in the $x_1$–$x_2$ plane): specimen CNc3P_53, Table 2b
+- Transversely isotropic model (isotropic in the $x_2$–$x_3$ plane): specimen CNd1_65, Table 2e
 
-The CNc3P_53 specimen was first used to compare the isotropic model with the transversely isotropic model that is isotropic in the $x_1$-$x_2$ plane. The same theoretical response reported by Bhat & Yamada (2022) was used as the reference for both cases.
+The CNc3P_53 specimen was first used to compare the isotropic model with the transversely isotropic model that is isotropic in the $x_1$–$x_2$ plane. The same theoretical response reported by Bhat & Yamada (2022) was used as the reference for both cases.
 
-The CNd1_65 specimen was then used to evaluate a second transversely isotropic configuration, in which the circumferential direction ($x_1$) represents the anisotropic direction and the longitudinal-radial ($x_2$-$x_3$) plane is isotropic. For this case, the FEBio response was compared with the experimental data reported in the publication.
+The CNd1_65 specimen was then used to evaluate a second transversely isotropic configuration, in which the circumferential direction ($x_1$) represents the anisotropic direction and the longitudinal-radial ($x_2$–$x_3$) plane is isotropic. For this case, the FEBio response was compared with the experimental data reported in the publication.
 
 Reference stress-strain curves were digitized from the figures provided in the publication to allow direct comparison with the Cauchy stresses obtained from FEBio.
 
@@ -162,7 +162,7 @@ Reference stress-strain curves were digitized from the figures provided in the p
 
 Rectangular, single-layer specimens were generated using the same Python-based workflow provided in this repository. The Fung material parameters reported by Bhat & Yamada (2022) were assigned to the specimens. The specimen dimensions and prescribed displacements were selected to reproduce the equibiaxial strain ranges used for the verification comparisons. The specimen thickness and mesh density were not reported in the publication and were therefore selected for the FEBio verification models.
 
-For the CNc3P_53 specimen used for the isotropic and $x_1$-$x_2$ transversely isotropic cases:
+For the CNc3P_53 specimen used for the isotropic and $x_1$–$x_2$ transversely isotropic cases:
 
 - Length (x): 15.0 mm
 - Width (y): 15.0 mm
@@ -174,7 +174,7 @@ For the CNc3P_53 specimen used for the isotropic and $x_1$-$x_2$ transversely is
 - Loading mode: symmetric gauge
 - Prescribed displacement: 2.25 mm per side in the x- and y-directions
 
-For the CNd1_65 specimen used for the $x_2$-$x_3$ transversely isotropic case:
+For the CNd1_65 specimen used for the $x_2$–$x_3$ transversely isotropic case:
 
 - Length (x): 18.0 mm
 - Width (y): 18.0 mm
@@ -307,15 +307,15 @@ For the isotropic verification, the FEBio response generated using the material 
 
 The isotropic material model produced equivalent circumferential and longitudinal stress responses, as expected from the assumed material symmetry. Close agreement was observed between the FEBio-generated and digitized responses throughout the investigated strain range. Minor differences were observed at higher strains, with the FEBio response slightly underpredicting the digitized response near the maximum applied strain.
 
-The same CNc3P_53 theoretical response was subsequently compared with the transversely isotropic material parameters reported in Table 2b. In this case, the material was defined as isotropic in the circumferential-longitudinal (x1-x2) plane.
+The same CNc3P_53 theoretical response was subsequently compared with the transversely isotropic material parameters reported in Table 2b. In this case, the material was defined as isotropic in the circumferential-longitudinal ($x_1$–$x_2$) plane.
 
 ![Fung transversely isotropic verification for specimen CNc3P_53](figures/fung_transversely_isotropic_verification_CNc3P_53.png)
 
-*Figure 3. Comparison of FEBio-generated stress-strain curves for the isotropic and x1-x2 transversely isotropic Fung material models with theoretical data for specimen CNc3P_53 digitized from Bhat & Yamada (2022).*
+*Figure 3. Comparison of FEBio-generated stress-strain curves for the isotropic and $x_1$–$x_2$ transversely isotropic Fung material models with theoretical data for specimen CNc3P_53 digitized from Bhat & Yamada (2022).*
 
 The transversely isotropic FEBio response provided closer agreement with the theoretical response than the isotropic model. This reproduces the trend reported by Bhat & Yamada (2022), who found a lower curve-fitting error for the transversely isotropic formulation than for the isotropic formulation for this specimen.
 
-A second transversely isotropic configuration was evaluated using specimen CNd1_65 and the material parameters reported in Table 2e. In this configuration, the longitudinal-radial ($x_2$-$x_3$) plane is isotropic, and the circumferential ($x_1$) direction represents the unique anisotropic direction.
+A second transversely isotropic configuration was evaluated using specimen CNd1_65 and the material parameters reported in Table 2e. In this configuration, the longitudinal-radial ($x_2$–$x_3$) plane is isotropic, and the circumferential ($x_1$) direction represents the unique anisotropic direction.
 
 ![Fung transversely isotropic verification for specimen CNd1_65](figures/fung_transversely_isotropic_verification_CNd1_65.png)
 
@@ -333,11 +333,11 @@ The bulk modulus required by the FEBio Fung orthotropic material formulation was
 
 ![Fung bulk modulus sensitivity for the Table 2b transversely isotropic model](figures/fung_bulk_modulus_sensitivity.png)
 
-*Figure 5. Sensitivity of the Table 2b transversely isotropic Fung verification response to the assumed bulk modulus for specimen CNc3P_53. Responses are shown for $K = 1$, $10$, and $100$ MPa, with $K = 10$ MPa corresponding to the value used in the primary verification.*
+*Figure 5. Sensitivity of the Table 2b transversely isotropic Fung verification response to the assumed bulk modulus for specimen CNc3P_53. Responses are shown for K = 1, 10, and 100 MPa, with K = 10 MPa corresponding to the value used in the primary verification.*
 
 Reducing the bulk modulus from $10$ MPa to $1$ MPa produced a noticeable reduction in the predicted stress response, particularly at larger strains. In contrast, increasing the bulk modulus from $10$ MPa to $100$ MPa produced only a small change in the predicted response, with the two curves remaining closely aligned throughout the investigated strain range. The agreement with the theoretical response reported by Bhat & Yamada (2022) was also maintained when the bulk modulus was increased to $100$ MPa. These results indicate that the predicted response becomes more sensitive to the bulk modulus at lower values, whereas increasing the bulk modulus beyond the selected value of $10$ MPa has comparatively little influence on the verification result.
 
-A sensitivity analysis was also performed for the shear moduli that could not be uniquely determined from the parameters reported by Bhat & Yamada (2022). For the Table 2b transversely isotropic case, $G_23$ and $G_31$ were assigned values of 0.005 MPa in the primary verification. To evaluate the influence of these assumed values, both shear moduli were varied by one order of magnitude while all other material parameters and model settings were maintained. The resulting stress-strain responses remained closely aligned with the response obtained using the original values and with the theoretical response reported by Bhat & Yamada (2022). This indicates that the predicted response for this verification case was insensitive to the selected values of $G_23$ and $G_31$ over the investigated range.
+A sensitivity analysis was also performed for the shear moduli that could not be uniquely determined from the parameters reported by Bhat & Yamada (2022). For the Table 2b transversely isotropic case, $G_{23}$ and $G_{31}$ were assigned values of 0.005 MPa in the primary verification. To evaluate the influence of these assumed values, both shear moduli were varied by one order of magnitude while all other material parameters and model settings were maintained. The resulting stress-strain responses remained closely aligned with the response obtained using the original values and with the theoretical response reported by Bhat & Yamada (2022). This indicates that the predicted response for this verification case was insensitive to the selected values of $G_{23}$ and $G_{31}$ over the investigated range.
 
 ### Conclusions & Limitations
 
