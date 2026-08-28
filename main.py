@@ -265,7 +265,9 @@ def create_unique_output_path(
             "filename characters."
         )
 
-    directory = Path(output_directory)
+    # Anchor the output directory to this script's location rather than to
+    # the shell's current working directory.
+    directory = Path(__file__).resolve().parent / output_directory
     directory.mkdir(
         parents=True,
         exist_ok=True,
@@ -448,7 +450,7 @@ def main() -> None:
 
     try:
         output_path = generate_model()
-
+    
     except ValueError as error:
         print("\nConfiguration error")
         print("===================")
